@@ -48,16 +48,6 @@ async def run() -> None:
     )
 
     socks = Socks5Server(settings, database)
-    router = ProtocolRouter(
-        settings.router_host,
-        settings.router_port,
-        settings.socks_host,
-        settings.socks_port,
-        "127.0.0.1",
-        settings.mtproto_port,
-        settings.mtproto_secret is not None,
-        settings.max_connections,
-    )
     mtproto = MtprotoProcess(settings)
     health = HealthServer(database)
 
@@ -73,7 +63,23 @@ async def run() -> None:
     router_server = None
     health_server = None
     try:
-        await mtproto.start()
+        try:
+            await mtproto.start()
+        except Exception:
+            # Keep the already-working SOCKS5 service available if Telegram's
+            # config endpoints or the optional MTProxy process are unavailable.
+            logger.exception("MTProto could not start; continuing with SOCKS5 only")
+
+        router = ProtocolRouter(
+            settings.router_host,
+            settings.router_port,
+            settings.socks_host,
+            settings.socks_port,
+            "127.0.0.1",
+            settings.mtproto_port,
+            mtproto.is_running,
+            settings.max_connections,
+        )
         socks_server = await socks.start()
         router_server = await router.start()
         health_server = await asyncio.start_server(
@@ -88,8 +94,10 @@ async def run() -> None:
         logger.info("TCP protocol router listening on %s:%d", settings.router_host, settings.router_port)
         logger.info("HTTP health listening on %s:%d", settings.health_host, settings.health_port)
         logger.info("Allowed SOCKS5 destination ports: %s", ",".join(map(str, sorted(settings.allowed_ports))))
-        if settings.mtproto_secret:
+        if mtproto.is_running:
             logger.info("MTProto is enabled on internal port %d", settings.mtproto_port)
+        elif settings.mtproto_secret:
+            logger.error("MTProto is configured but unavailable; SOCKS5 remains active")
 
         await stop.wait()
     finally:

@@ -115,6 +115,7 @@ class MtprotoProcess:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.process: asyncio.subprocess.Process | None = None
+        self._stats_task: asyncio.Task[None] | None = None
 
     @property
     def is_running(self) -> bool:
@@ -195,32 +196,60 @@ class MtprotoProcess:
             self.settings.mtproto_port,
             "configured" if self.settings.mtproto_proxy_tag else "not configured",
         )
-        try:
-            stats = await read_mtproxy_stats(
-                "127.0.0.1",
-                self.settings.mtproto_stats_port,
-            )
-            ready = stats.get("total_ready_targets", "unknown")
-            allocated = stats.get("total_allocated_targets", "unknown")
-            declared = stats.get("total_declared_targets", "unknown")
-            clients = stats.get("total_special_connections", "unknown")
-            logger.info(
-                "MTProxy upstream stats: total_ready_targets=%s total_allocated_targets=%s "
-                "total_declared_targets=%s total_special_connections=%s",
-                ready,
-                allocated,
-                declared,
-                clients,
-            )
-            logger.debug("MTProxy raw stats fields: %s", stats)
-            if ready == "0":
-                logger.warning(
-                    "MTProxy reports zero ready Telegram upstream targets; check proxy-multi.conf and outbound connectivity"
+        # MTProxy creates outbound target connections asynchronously. Sampling
+        # immediately after opening the listener can report zero ready targets
+        # simply because the initial handshakes have not completed yet.
+        self._stats_task = asyncio.create_task(
+            self._monitor_stats(),
+            name="hyperproxy-mtproto-stats",
+        )
+
+    async def _monitor_stats(self) -> None:
+        """Log upstream readiness after startup and continuously while MTProxy runs."""
+        await asyncio.sleep(10)
+        while self.is_running:
+            try:
+                stats = await read_mtproxy_stats(
+                    "127.0.0.1",
+                    self.settings.mtproto_stats_port,
                 )
-        except (ConnectionError, OSError, asyncio.TimeoutError, RuntimeError) as exc:
-            logger.warning("Could not read MTProxy loopback stats: %s", exc)
+                fields = (
+                    "total_ready_targets",
+                    "total_allocated_targets",
+                    "total_declared_targets",
+                    "total_inactive_targets",
+                    "ready_outbound_connections",
+                    "active_outbound_connections",
+                    "outbound_connections",
+                    "total_connect_failures",
+                    "total_special_connections",
+                )
+                values = {name: stats.get(name, "unknown") for name in fields}
+                logger.info(
+                    "MTProxy upstream stats: %s",
+                    " ".join(f"{name}={value}" for name, value in values.items()),
+                )
+                logger.debug("MTProxy raw stats fields: %s", stats)
+                if values["total_ready_targets"] == "0":
+                    logger.warning(
+                        "MTProxy has zero ready Telegram upstream targets after startup; "
+                        "inspect outbound TCP reachability and Telegram target handshakes"
+                    )
+            except (ConnectionError, OSError, asyncio.TimeoutError, RuntimeError) as exc:
+                logger.warning("Could not read MTProxy loopback stats: %s", exc)
+
+            await asyncio.sleep(30)
 
     async def stop(self) -> None:
+        stats_task = self._stats_task
+        self._stats_task = None
+        if stats_task is not None:
+            stats_task.cancel()
+            try:
+                await stats_task
+            except asyncio.CancelledError:
+                pass
+
         process = self.process
         if process is None or process.returncode is not None:
             return

@@ -200,18 +200,22 @@ class MtprotoProcess:
                 "127.0.0.1",
                 self.settings.mtproto_stats_port,
             )
-            ready = stats.get("ready_targets", "unknown")
-            active = stats.get("active_targets", "unknown")
+            ready = stats.get("total_ready_targets", "unknown")
+            allocated = stats.get("total_allocated_targets", "unknown")
+            declared = stats.get("total_declared_targets", "unknown")
             clients = stats.get("total_special_connections", "unknown")
             logger.info(
-                "MTProxy upstream stats: ready_targets=%s active_targets=%s inbound_connections=%s",
+                "MTProxy upstream stats: total_ready_targets=%s total_allocated_targets=%s "
+                "total_declared_targets=%s total_special_connections=%s",
                 ready,
-                active,
+                allocated,
+                declared,
                 clients,
             )
-            if ready.isdigit() and active.isdigit() and int(ready) > 0 and int(active) < int(ready):
+            logger.debug("MTProxy raw stats fields: %s", stats)
+            if ready == "0":
                 logger.warning(
-                    "MTProxy has fewer active Telegram upstream targets than configured targets"
+                    "MTProxy reports zero ready Telegram upstream targets; check proxy-multi.conf and outbound connectivity"
                 )
         except (ConnectionError, OSError, asyncio.TimeoutError, RuntimeError) as exc:
             logger.warning("Could not read MTProxy loopback stats: %s", exc)

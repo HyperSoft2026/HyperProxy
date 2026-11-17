@@ -51,6 +51,43 @@ async def wait_for_listener(
             await asyncio.sleep(min(0.1, max(0.0, deadline - loop.time())))
 
 
+async def read_mtproxy_stats(
+    host: str,
+    port: int,
+    timeout: float = 2.0,
+) -> dict[str, str]:
+    """Read the official MTProxy loopback /stats endpoint."""
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(host, port),
+        timeout=timeout,
+    )
+    try:
+        writer.write(
+            b"GET /stats HTTP/1.0\r\n"
+            b"Host: localhost\r\n"
+            b"Connection: close\r\n\r\n"
+        )
+        await writer.drain()
+        response = await asyncio.wait_for(reader.read(65536), timeout=timeout)
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except (ConnectionError, OSError):
+            pass
+
+    header, separator, body = response.partition(b"\r\n\r\n")
+    if not separator or b" 200 " not in header.split(b"\r\n", 1)[0]:
+        raise RuntimeError("MTProxy stats endpoint did not return HTTP 200")
+
+    stats: dict[str, str] = {}
+    for raw_line in body.decode("utf-8", errors="replace").splitlines():
+        fields = raw_line.strip().replace("=", " ").split()
+        if len(fields) >= 2:
+            stats[fields[0]] = fields[1]
+    return stats
+
+
 
 PROXY_SECRET_URL = "https://core.telegram.org/getProxySecret"
 PROXY_CONFIG_URL = "https://core.telegram.org/getProxyConfig"
@@ -157,6 +194,26 @@ class MtprotoProcess:
             self.settings.mtproto_port,
             "configured" if self.settings.mtproto_proxy_tag else "not configured",
         )
+        try:
+            stats = await read_mtproxy_stats(
+                "127.0.0.1",
+                self.settings.mtproto_stats_port,
+            )
+            ready = stats.get("ready_targets", "unknown")
+            active = stats.get("active_targets", "unknown")
+            clients = stats.get("total_special_connections", "unknown")
+            logger.info(
+                "MTProxy upstream stats: ready_targets=%s active_targets=%s inbound_connections=%s",
+                ready,
+                active,
+                clients,
+            )
+            if ready.isdigit() and active.isdigit() and int(ready) > 0 and int(active) < int(ready):
+                logger.warning(
+                    "MTProxy has fewer active Telegram upstream targets than configured targets"
+                )
+        except (ConnectionError, OSError, asyncio.TimeoutError, RuntimeError) as exc:
+            logger.warning("Could not read MTProxy loopback stats: %s", exc)
 
     async def stop(self) -> None:
         process = self.process

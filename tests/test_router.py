@@ -72,6 +72,29 @@ class ProtocolRouterTests(unittest.IsolatedAsyncioTestCase):
         writer.close()
         await writer.wait_closed()
 
+    async def test_mtproto_disabled_routes_traffic_to_socks_backend(self):
+        router = ProtocolRouter(
+            "127.0.0.1",
+            0,
+            "127.0.0.1",
+            self.socks_port,
+            "127.0.0.1",
+            self.mtproto_port,
+            False,
+        )
+        server = await router.start()
+        port = server.sockets[0].getsockname()[1]
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write(b"\x11\x22\x33")
+            await writer.drain()
+            self.assertEqual(await asyncio.wait_for(reader.readexactly(4), timeout=2), b"S\x11\x22\x33")
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            server.close()
+            await server.wait_closed()
+
 
 if __name__ == "__main__":
     unittest.main()

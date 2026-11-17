@@ -19,6 +19,14 @@ class MtprotoConfigTests(unittest.TestCase):
         self.assertEqual(settings.socks_port, 4041)
         self.assertEqual(settings.mtproto_port, 4042)
 
+    def test_legacy_socks_listener_variables_keep_public_port(self):
+        env = {**BASE_ENV, "SOCKS_HOST": "0.0.0.0", "SOCKS_PORT": "4040"}
+        settings = Settings.from_env(env)
+        self.assertEqual(settings.router_host, "0.0.0.0")
+        self.assertEqual(settings.router_port, 4040)
+        self.assertEqual(settings.socks_host, "127.0.0.1")
+        self.assertEqual(settings.socks_port, 4041)
+
     def test_valid_mtproto_secret_and_tag(self):
         env = {
             **BASE_ENV,
@@ -36,6 +44,15 @@ class MtprotoConfigTests(unittest.TestCase):
 
     def test_tag_requires_secret(self):
         env = {**BASE_ENV, "MTPROTO_PROXY_TAG": "abcdef0123456789abcdef0123456789"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
+    def test_invalid_tag_is_rejected(self):
+        env = {
+            **BASE_ENV,
+            "MTPROTO_SECRET": "0123456789abcdef0123456789abcdef",
+            "MTPROTO_PROXY_TAG": "not-a-tag",
+        }
         with self.assertRaises(ValueError):
             Settings.from_env(env)
 

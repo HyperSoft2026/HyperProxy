@@ -13,6 +13,45 @@ from .config import Settings
 
 logger = logging.getLogger("hyperproxy.mtproto")
 
+async def wait_for_listener(
+    host: str,
+    port: int,
+    process: asyncio.subprocess.Process,
+    timeout: float = 10.0,
+) -> None:
+    """Wait until MTProxy accepts a local TCP connection on its client port."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    last_error: BaseException | None = None
+
+    while True:
+        if process.returncode is not None:
+            raise RuntimeError(
+                f"MTProxy exited before opening client port {port} "
+                f"with status {process.returncode}"
+            )
+
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise RuntimeError(
+                f"MTProxy stayed running but did not open client port {port} "
+                f"within {timeout:g} seconds"
+            ) from last_error
+
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port),
+                timeout=min(0.5, remaining),
+            )
+            writer.close()
+            await writer.wait_closed()
+            return
+        except (ConnectionError, OSError, asyncio.TimeoutError) as exc:
+            last_error = exc
+            await asyncio.sleep(min(0.1, max(0.0, deadline - loop.time())))
+
+
+
 PROXY_SECRET_URL = "https://core.telegram.org/getProxySecret"
 PROXY_CONFIG_URL = "https://core.telegram.org/getProxyConfig"
 BINARY = "/usr/local/bin/mtproto-proxy"
@@ -94,16 +133,29 @@ class MtprotoProcess:
         )
 
         self.process = await asyncio.create_subprocess_exec(*command)
-        await asyncio.sleep(0.75)
-        if self.process.returncode is not None:
-            return_code = self.process.returncode
+        try:
+            await wait_for_listener(
+                "127.0.0.1",
+                self.settings.mtproto_port,
+                self.process,
+                timeout=10.0,
+            )
+        except Exception:
+            process = self.process
+            if process is not None and process.returncode is None:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
             self.process = None
-            raise RuntimeError(f"MTProxy exited during startup with status {return_code}")
+            raise
 
         logger.info(
-            "MTProto listening on 127.0.0.1:%d; promotion tag %s",
+            "MTProto client listener verified on 127.0.0.1:%d; promotion tag %s",
             self.settings.mtproto_port,
-            "configured" if self.settings.mtproto_proxy_tag else "not configured yet",
+            "configured" if self.settings.mtproto_proxy_tag else "not configured",
         )
 
     async def stop(self) -> None:

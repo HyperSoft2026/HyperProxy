@@ -52,7 +52,7 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await reader.readexactly(2), b"\x01\x00")
 
         # SOCKS5 CONNECT to 127.0.0.1:443 must be denied by destination policy.
-        writer.write(b"\x05\x01\x00\x01\x7f\x00\x00\x7f\x01\xbb")
+        writer.write(b"\x05\x01\x00\x01\x7f\x00\x00\x01\x01\xbb")
         await writer.drain()
         response = await reader.readexactly(10)
         self.assertEqual(response[0:2], b"\x05\x02")

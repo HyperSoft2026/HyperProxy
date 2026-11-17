@@ -25,3 +25,5 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Check Python syntax
         run: python -m compileall -q hyperproxy tests
+      - name: Build Docker image including official MTProxy
+        run: docker build -t hypersoft/hyperproxy:ci .

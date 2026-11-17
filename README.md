@@ -1,62 +1,95 @@
 # HyperProxy
 
-**HyperProxy by HyperSoft** is an authenticated SOCKS5 TCP proxy designed for Telegram clients and other explicitly permitted TCP destinations.
+**HyperProxy by HyperSoft** provides authenticated SOCKS5 and optional Telegram MTProto proxy services behind one Clever Cloud TCP redirection.
 
-> Version 1.0.0 · Docker · Python 3.12 · PostgreSQL
+> Version 1.1.0 · Docker · Python 3.12 · PostgreSQL · Telegram MTProxy
 
 ## Features
 
-- SOCKS5 `CONNECT` with mandatory Username/Password authentication (RFC 1928 / RFC 1929).
-- PostgreSQL-backed user accounts; passwords are stored as salted scrypt hashes.
+- SOCKS5 CONNECT with mandatory Username/Password authentication (RFC 1928 / RFC 1929).
+- Optional official Telegram MTProxy with a stable 32-character hexadecimal secret.
+- A small TCP protocol router dispatches SOCKS5 and MTProto over the same public TCP port.
+- Optional Telegram promotion tag from @MTProxyBot to promote a public channel.
+- PostgreSQL-backed SOCKS5 user accounts; passwords are stored as salted scrypt hashes.
 - Bootstrap administrator account configured through environment variables.
-- Default destination-port allowlist: `80,443,5222`.
-- Rejects loopback, private, link-local, multicast, reserved, and other non-global destination IP addresses.
-- Global and per-user concurrent connection limits.
-- HTTP health endpoints on port `8080`.
-- TCP SOCKS5 listener on port `4040`, compatible with Clever Cloud TCP Redirections.
-- Minimal connection metadata only; destination hosts and payload contents are not stored.
+- Default SOCKS5 destination-port allowlist: 80,443,5222.
+- Rejects loopback, private, link-local, multicast, reserved, and other non-global SOCKS5 destination IP addresses.
+- Global and per-user concurrent SOCKS5 connection limits.
+- HTTP health endpoints on port 8080.
+- Minimal SOCKS5 connection metadata only; destination hosts and payload contents are not stored.
 
-HyperProxy is a **SOCKS5 proxy**, not an MTProto proxy. It supports TCP CONNECT only; UDP ASSOCIATE and BIND are intentionally disabled.
+SOCKS5 and MTProto are separate protocols. SOCKS5 uses the administrator username/password; MTProto uses its own secret. The SOCKS5 destination policy does not apply to MTProto, which only forwards Telegram traffic.
 
 ## Clever Cloud deployment
 
-1. Create or keep the application with the **Docker** runtime and connect this repository's `main` branch.
-2. Link a PostgreSQL add-on to the application. Clever Cloud should provide `POSTGRESQL_ADDON_URI` automatically.
-3. Add these application environment variables:
+1. Keep the application on the **Docker** runtime and connect this repository's main branch.
+2. Keep the linked PostgreSQL add-on. Clever Cloud should provide POSTGRESQL_ADDON_URI automatically.
+3. Keep the existing application environment variables:
 
    | Variable | Required | Example / default |
    |---|---:|---|
-   | `PROXY_ADMIN_USERNAME` | Yes | `hypersoft-admin` |
-   | `PROXY_ADMIN_PASSWORD` | Yes | A unique random secret, at least 16 characters |
-   | `POSTGRESQL_ADDON_URI` | Yes* | Provided by the linked add-on |
-   | `ALLOWED_PORTS` | No | `80,443,5222` |
-   | `MAX_CONNECTIONS` | No | `200` |
-   | `MAX_CONNECTIONS_PER_USER` | No | `20` |
-   | `CONNECT_TIMEOUT_SECONDS` | No | `10` |
-   | `AUTH_TIMEOUT_SECONDS` | No | `10` |
+   | PROXY_ADMIN_USERNAME | Yes | hypersoft-admin |
+   | PROXY_ADMIN_PASSWORD | Yes | A unique random secret, at least 16 characters |
+   | POSTGRESQL_ADDON_URI | Yes* | Provided by the linked add-on |
+   | ALLOWED_PORTS | No | 80,443,5222 |
+   | MAX_CONNECTIONS | No | 200 |
+   | MAX_CONNECTIONS_PER_USER | No | 20 |
 
-   `DATABASE_URL` may be used instead of `POSTGRESQL_ADDON_URI`.
+   DATABASE_URL may be used instead of POSTGRESQL_ADDON_URI.
 
-4. Keep the Docker exposed HTTP port at `8080` and TCP port at `4040` (the Clever Cloud defaults). The container serves `/health` and `/ready` on HTTP port `8080` and listens for SOCKS5 on TCP port `4040`.
-5. Keep the existing `cleverapps.io` TCP redirection. Your public endpoint is the application's `cleverapps.io` hostname and the public port assigned by Clever Cloud (currently shown in your console as `18067`). The public port forwards to container port `4040`.
-6. Deploy the latest commit. Check `https://YOUR-APP.cleverapps.io/health` for the HTTP health response.
+4. Keep the existing Clever Cloud TCP redirection pointing to internal port 4040. **Do not create another redirection or change the current public port.** The router on 4040 dispatches traffic to the SOCKS5 backend on 4041 or the MTProto backend on 4042.
+5. Keep the HTTP health server on 8080. Check https://YOUR-APP.cleverapps.io/health and /ready.
+6. MTProto is optional. If MTPROTO_SECRET is empty, the public TCP listener continues to route traffic to SOCKS5 only.
 
-*Do not paste database credentials or proxy passwords into source files, GitHub issues, or chat messages. Set them only in Clever Cloud environment variables.
+*Do not paste database credentials, SOCKS5 passwords, MTProto secrets, or proxy tags into source files, GitHub issues, or chat messages. Set them only in Clever Cloud environment variables.
+
+## Enable MTProto
+
+1. Generate a 16-byte secret on your device or in Termux:
+
+   ~~~bash
+   openssl rand -hex 16
+   ~~~
+
+   The output must be exactly 32 hexadecimal characters. Keep it stable across redeployments.
+2. Add the generated value to the Clever Cloud environment variable MTPROTO_SECRET. Leave MTPROTO_PROXY_TAG empty for the first deployment.
+3. Deploy and wait for the log line confirming that MTProto is listening on internal port 4042.
+4. Use the application's existing public Clever Cloud hostname and TCP redirection port to register the proxy with Telegram's official @MTProxyBot:
+   - Send /newproxy.
+   - Send YOUR-APP.cleverapps.io:YOUR_EXISTING_PUBLIC_TCP_PORT.
+   - Send the 32-character MTPROTO_SECRET.
+   - Save the 32-character proxy tag returned by the bot.
+5. Add the returned tag as MTPROTO_PROXY_TAG in Clever Cloud and redeploy. HyperProxy passes it to the official MTProxy process using the -P option.
+6. In @MTProxyBot, open /myproxies, select the registered proxy, choose **Set promotion**, and submit the public channel link:
+
+   https://t.me/HyperSoft26
+
+   Telegram controls when the promotion appears to connected users. It is not an automatic channel subscription.
 
 ## Connect from Telegram
 
-In Telegram, open **Settings → Data and Storage → Proxy Settings → Add Proxy → SOCKS5** and enter:
+### SOCKS5
 
-- **Server:** your app's `cleverapps.io` hostname
-- **Port:** the public TCP redirection port shown by Clever Cloud
-- **Username:** `PROXY_ADMIN_USERNAME`
-- **Password:** `PROXY_ADMIN_PASSWORD`
+Open **Settings → Data and Storage → Proxy Settings → Add Proxy → SOCKS5**:
 
-Do not enter the internal port `4040` in Telegram when connecting through Clever Cloud's public load balancer.
+- **Server:** your app's cleverapps.io hostname
+- **Port:** the existing public TCP redirection port
+- **Username:** PROXY_ADMIN_USERNAME
+- **Password:** PROXY_ADMIN_PASSWORD
+
+### MTProto
+
+After MTProto is enabled, share a link in this format:
+
+~~~text
+https://t.me/proxy?server=YOUR-APP.cleverapps.io&port=YOUR_EXISTING_PUBLIC_TCP_PORT&secret=YOUR_MTPROTO_SECRET
+~~~
+
+MTProto does not use the SOCKS5 username or password. It uses the separate MTPROTO_SECRET.
 
 ## Local development
 
-```bash
+~~~bash
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
@@ -64,34 +97,36 @@ cp .env.example .env
 # Set POSTGRESQL_ADDON_URI and a strong PROXY_ADMIN_PASSWORD in .env
 set -a && . ./.env && set +a
 python -m hyperproxy
-```
+~~~
 
 Run tests:
 
-```bash
+~~~bash
 python -m unittest discover -s tests -v
-```
+~~~
 
 Build the container:
 
-```bash
-docker build -t hypersoft/hyperproxy:1.0.0 .
-```
+~~~bash
+docker build -t hypersoft/hyperproxy:1.1.0 .
+~~~
 
 ## Security notes
 
-- Never run this service without a strong bootstrap username and password.
-- Do not remove the destination IP checks or connection limits for a public deployment.
-- Only destination ports listed in `ALLOWED_PORTS` are accepted. Add ports only when you understand why clients need them.
-- The proxy does not decrypt TLS traffic. It forwards TCP bytes to the requested public destination.
-- The load balancer may hide the original client IP from the application; per-user authentication and connection limits are therefore used instead of trusting source IPs.
-- The bootstrap account's password is synchronized from the nvironment on startup. Changing the environment value and redeploying rotates that account's password.
+- Never run the SOCKS5 service without a strong bootstrap username and password.
+- Do not remove the SOCKS5 destination IP checks or connection limits for a public deployment.
+- Only SOCKS5 destination ports listed in ALLOWED_PORTS are accepted. Add ports only when you understand why clients need them.
+- MTProto is a Telegram-specific proxy, not a general-purpose VPN.
+- Keep the MTProto secret and promotion tag in Clever Cloud environment variables. Share the MTProto secret only with intended proxy users.
+- The proxy does not decrypt Telegram message contents. The operator can still observe connection metadata such as client IP addresses and connection times.
+- The load balancer may hide the original client IP from the application; per-user SOCKS5 authentication and connection limits are therefore used instead of trusting source IPs.
+- The bootstrap SOCKS5 account's password is synchronized from the environment on startup. Changing the environment value and redeploying rotates that account's password.
 
 ## Health endpoints
 
-- `GET /` or `GET /health` — process liveness.
-- `GET /ready` — PostgreSQL readiness.
+- GET / or /health — process liveness.
+- GET /ready — PostgreSQL readiness.
 
 ## License
 
-No license has been selected for this repository yet.
+No license has been selected for HyperProxy's own Python code. See THIRD_PARTY_NOTICES.md for the included Telegram MTProxy component.

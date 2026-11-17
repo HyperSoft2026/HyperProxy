@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 
+from . import __version__
 from .database import Database
 
 logger = logging.getLogger("hyperproxy.health")
@@ -17,7 +18,7 @@ class HealthServer:
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         status = 200
-        payload: dict[str, str] = {"service": "HyperProxy", "status": "ok", "version": "1.0.0"}
+        payload: dict[str, str] = {"service": "HyperProxy", "status": "ok", "version": __version__}
         method = "GET"
         try:
             request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=3)

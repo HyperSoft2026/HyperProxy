@@ -1,0 +1,61 @@
+import unittest
+
+from hyperproxy.config import Settings
+
+
+BASE_ENV = {
+    "DATABASE_URL": "postgresql://unused",
+    "PROXY_ADMIN_USERNAME": "test-admin",
+    "PROXY_ADMIN_PASSWORD": "a-long-test-password",
+}
+
+
+class MtprotoConfigTests(unittest.TestCase):
+    def test_mtproto_is_optional_by_default(self):
+        settings = Settings.from_env(BASE_ENV)
+        self.assertIsNone(settings.mtproto_secret)
+        self.assertIsNone(settings.mtproto_proxy_tag)
+        self.assertEqual(settings.router_port, 4040)
+        self.assertEqual(settings.socks_port, 4041)
+        self.assertEqual(settings.mtproto_port, 4042)
+
+    def test_legacy_socks_listener_variables_keep_public_port(self):
+        env = {**BASE_ENV, "SOCKS_HOST": "0.0.0.0", "SOCKS_PORT": "4040"}
+        settings = Settings.from_env(env)
+        self.assertEqual(settings.router_host, "0.0.0.0")
+        self.assertEqual(settings.router_port, 4040)
+        self.assertEqual(settings.socks_host, "127.0.0.1")
+        self.assertEqual(settings.socks_port, 4041)
+
+    def test_valid_mtproto_secret_and_tag(self):
+        env = {
+            **BASE_ENV,
+            "MTPROTO_SECRET": "0123456789abcdef0123456789abcdef",
+            "MTPROTO_PROXY_TAG": "abcdef0123456789abcdef0123456789",
+        }
+        settings = Settings.from_env(env)
+        self.assertEqual(settings.mtproto_secret, env["MTPROTO_SECRET"])
+        self.assertEqual(settings.mtproto_proxy_tag, env["MTPROTO_PROXY_TAG"])
+
+    def test_invalid_mtproto_secret_is_rejected(self):
+        env = {**BASE_ENV, "MTPROTO_SECRET": "not-a-secret"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
+    def test_tag_requires_secret(self):
+        env = {**BASE_ENV, "MTPROTO_PROXY_TAG": "abcdef0123456789abcdef0123456789"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
+    def test_invalid_tag_is_rejected(self):
+        env = {
+            **BASE_ENV,
+            "MTPROTO_SECRET": "0123456789abcdef0123456789abcdef",
+            "MTPROTO_PROXY_TAG": "not-a-tag",
+        }
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
+
+if __name__ == "__main__":
+    unittest.main()

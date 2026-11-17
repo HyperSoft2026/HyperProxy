@@ -166,6 +166,7 @@ class MtprotoProcess:
                 str(proxy_config_file),
                 "-M",
                 str(self.settings.mtproto_workers),
+                "--http-stats",
             ]
         )
 

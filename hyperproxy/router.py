@@ -97,6 +97,7 @@ class ProtocolRouter:
             protocol_name = "MTProto"
 
         backend_writer: asyncio.StreamWriter | None = None
+        started_at = asyncio.get_running_loop().time()
         try:
             backend_reader, backend_writer = await asyncio.wait_for(
                 asyncio.open_connection(backend_host, backend_port),
@@ -106,10 +107,18 @@ class ProtocolRouter:
                 backend_writer.write(prefix)
                 await backend_writer.drain()
             logger.debug("Routed incoming TCP connection to %s", protocol_name)
-            await asyncio.gather(
+            client_to_backend, backend_to_client = await asyncio.gather(
                 self._pipe(reader, backend_writer),
                 self._pipe(backend_reader, writer),
             )
+            if protocol_name == "MTProto":
+                duration_ms = int((asyncio.get_running_loop().time() - started_at) * 1000)
+                logger.info(
+                    "MTProto relay ended: client_to_backend_bytes=%d backend_to_client_bytes=%d duration_ms=%d",
+                    client_to_backend,
+                    backend_to_client,
+                    duration_ms,
+                )
         except (ConnectionError, OSError, asyncio.TimeoutError):
             logger.debug("Could not establish %s backend connection", protocol_name, exc_info=True)
         finally:
@@ -129,9 +138,11 @@ class ProtocolRouter:
     async def _pipe(
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
-    ) -> None:
+    ) -> int:
+        transferred = 0
         try:
             while data := await reader.read(65536):
+                transferred += len(data)
                 writer.write(data)
                 await writer.drain()
         except asyncio.CancelledError:
@@ -145,3 +156,4 @@ class ProtocolRouter:
                     await writer.drain()
             except (ConnectionError, OSError, RuntimeError):
                 pass
+        return transferred

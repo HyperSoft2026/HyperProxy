@@ -27,42 +27,74 @@ def configure_logging() -> None:
     )
 
 
+async def create_database_pool(settings: Settings) -> asyncpg.Pool:
+    """Create a small PostgreSQL pool, retrying temporary connection-limit errors."""
+    logger = logging.getLogger("hyperproxy")
+    attempts = 3
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return await asyncpg.create_pool(
+                dsn=settings.database_url,
+                min_size=settings.database_pool_min_size,
+                max_size=settings.database_pool_max_size,
+                max_inactive_connection_lifetime=settings.database_pool_idle_seconds,
+                timeout=settings.connect_timeout,
+                command_timeout=15,
+            )
+        except asyncpg.exceptions.TooManyConnectionsError:
+            if attempt == attempts:
+                raise
+            delay = 2**attempt
+            logger.warning(
+                "PostgreSQL connection limit reached; retrying pool creation in %d seconds (attempt %d/%d)",
+                delay,
+                attempt,
+                attempts,
+            )
+            await asyncio.sleep(delay)
+
+    raise RuntimeError("PostgreSQL pool creation ended unexpectedly")
+
+
 async def run() -> None:
     configure_logging()
     logger = logging.getLogger("hyperproxy")
     settings = Settings.from_env()
 
     logger.info("Starting HyperProxy v%s", __version__)
-    pool = await asyncpg.create_pool(
-        dsn=settings.database_url,
-        min_size=1,
-        max_size=15,
-        timeout=settings.connect_timeout,
-        command_timeout=15,
+    pool = await create_database_pool(settings)
+    logger.info(
+        "PostgreSQL pool configured: min=%d max=%d idle_timeout=%ds",
+        settings.database_pool_min_size,
+        settings.database_pool_max_size,
+        settings.database_pool_idle_seconds,
     )
+
     database = Database(pool)
-    await database.initialize(
-        settings.admin_username,
-        settings.admin_password,
-        min(settings.max_connections_per_user, 20),
-    )
-
-    socks = Socks5Server(settings, database)
     mtproto = MtprotoProcess(settings)
-    health = HealthServer(database)
-
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, stop.set)
-        except NotImplementedError:
-            pass
-
     socks_server = None
     router_server = None
     health_server = None
+
     try:
+        await database.initialize(
+            settings.admin_username,
+            settings.admin_password,
+            min(settings.max_connections_per_user, 20),
+        )
+
+        socks = Socks5Server(settings, database)
+        health = HealthServer(database)
+
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except NotImplementedError:
+                pass
+
         try:
             await mtproto.start()
         except Exception:
@@ -101,18 +133,17 @@ async def run() -> None:
 
         await stop.wait()
     finally:
-        for server in (router_server, socks_server, health_server):
+        servers = (router_server, socks_server, health_server)
+        for server in servers:
             if server is not None:
                 server.close()
         await asyncio.gather(
-            *(
-                server.wait_closed()
-                for server in (router_server, socks_server, health_server)
-                if server is not None
-            )
+            *(server.wait_closed() for server in servers if server is not None)
         )
-        await mtproto.stop()
-        await pool.close()
+        try:
+            await mtproto.stop()
+        finally:
+            await pool.close()
         logger.info("HyperProxy stopped cleanly")
 
 

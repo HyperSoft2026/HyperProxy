@@ -13,6 +13,8 @@ from . import __version__
 from .config import Settings
 from .database import Database
 from .health import HealthServer
+from .mtproto import MtprotoProcess
+from .router import ProtocolRouter
 from .socks5 import Socks5Server
 
 
@@ -46,19 +48,17 @@ async def run() -> None:
     )
 
     socks = Socks5Server(settings, database)
-    health = HealthServer(database)
-    socks_server = await socks.start()
-    health_server = await asyncio.start_server(
-        health.handle,
-        settings.health_host,
-        settings.health_port,
-        limit=16384,
-        reuse_address=True,
+    router = ProtocolRouter(
+        settings.router_host,
+        settings.router_port,
+        settings.socks_host,
+        settings.socks_port,
+        "127.0.0.1",
+        settings.mtproto_port,
+        settings.mtproto_secret is not None,
     )
-
-    logger.info("SOCKS5 listening on %s:%d", settings.socks_host, settings.socks_port)
-    logger.info("HTTP health listening on %s:%d", settings.health_host, settings.health_port)
-    logger.info("Allowed destination ports: %s", ",".join(map(str, sorted(settings.allowed_ports))))
+    mtproto = MtprotoProcess(settings)
+    health = HealthServer(database)
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -68,12 +68,41 @@ async def run() -> None:
         except NotImplementedError:
             pass
 
+    socks_server = None
+    router_server = None
+    health_server = None
     try:
+        await mtproto.start()
+        socks_server = await socks.start()
+        router_server = await router.start()
+        health_server = await asyncio.start_server(
+            health.handle,
+            settings.health_host,
+            settings.health_port,
+            limit=16384,
+            reuse_address=True,
+        )
+
+        logger.info("SOCKS5 backend listening on %s:%d", settings.socks_host, settings.socks_port)
+        logger.info("TCP protocol router listening on %s:%d", settings.router_host, settings.router_port)
+        logger.info("HTTP health listening on %s:%d", settings.health_host, settings.health_port)
+        logger.info("Allowed SOCKS5 destination ports: %s", ",".join(map(str, sorted(settings.allowed_ports))))
+        if settings.mtproto_secret:
+            logger.info("MTProto is enabled on internal port %d", settings.mtproto_port)
+
         await stop.wait()
     finally:
-        socks_server.close()
-        health_server.close()
-        await asyncio.gather(socks_server.wait_closed(), health_server.wait_closed())
+        for server in (router_server, socks_server, health_server):
+            if server is not None:
+                server.close()
+        await asyncio.gather(
+            *(
+                server.wait_closed()
+                for server in (router_server, socks_server, health_server)
+                if server is not None
+            )
+        )
+        await mtproto.stop()
         await pool.close()
         logger.info("HyperProxy stopped cleanly")
 

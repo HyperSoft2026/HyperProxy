@@ -34,8 +34,13 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the administrator usernam
    | ALLOWED_PORTS | No | 80,443,5222 |
    | MAX_CONNECTIONS | No | 200 |
    | MAX_CONNECTIONS_PER_USER | No | 20 |
+   | DB_POOL_MIN_SIZE | No | 1 |
+   | DB_POOL_MAX_SIZE | No | 3 |
+   | DB_POOL_IDLE_SECONDS | No | 60 |
 
    DATABASE_URL may be used instead of POSTGRESQL_ADDON_URI.
+
+   PostgreSQL pool settings are separate from SOCKS5 client limits. The default pool opens 1 connection and grows only when needed, up to 3; idle connections are retired after 60 seconds. If PostgreSQL briefly rejects connections because its role limit is reached, startup retries pool creation twice with short backoff delays. The pool size can be lowered further with DB_POOL_MAX_SIZE=1 if the database plan has a very small per-role connection limit.
 
 4. Keep the existing Clever Cloud TCP redirection pointing to internal port 4040. **Do not create another redirection or change the current public port.** The router on 4040 dispatches traffic to the SOCKS5 backend on 4041 or the MTProto backend on 4042.
 5. Keep the HTTP health server on 8080. Check https://YOUR-APP.cleverapps.io/health and /ready.

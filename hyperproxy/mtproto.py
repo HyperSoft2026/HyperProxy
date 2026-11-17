@@ -22,7 +22,12 @@ def _download_file(url: str, destination: Path, minimum_size: int) -> None:
     request = Request(url, headers={"User-Agent": "HyperProxy/1.1"})
     with urlopen(request, timeout=20) as response:
         data = response.read(4 * 1024 * 1024 + 1)
-    if len(data) < minimum_size or len(data) > 4 * 1024 * 1024:
+    if (
+        len(data) < minimum_size
+        or len(data) > 4 * 1024 * 1024
+        or b"<html" in data[:512].lower()
+        or b"<!doctype" in data[:512].lower()
+    ):
         raise RuntimeError(f"Telegram returned an invalid configuration file: {url}")
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     temporary.write_bytes(data)
@@ -34,6 +39,10 @@ class MtprotoProcess:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.process: asyncio.subprocess.Process | None = None
+
+    @property
+    def is_running(self) -> bool:
+        return self.process is not None and self.process.returncode is None
 
     async def start(self) -> None:
         if not self.settings.mtproto_secret:

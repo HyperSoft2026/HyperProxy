@@ -20,6 +20,7 @@ class ProtocolRouter:
         mtproto_host: str,
         mtproto_port: int,
         mtproto_enabled: bool,
+        max_connections: int = 200,
     ) -> None:
         self.host = host
         self.port = port
@@ -28,6 +29,8 @@ class ProtocolRouter:
         self.mtproto_host = mtproto_host
         self.mtproto_port = mtproto_port
         self.mtproto_enabled = mtproto_enabled
+        self.max_connections = max_connections
+        self.active_connections = 0
 
     async def start(self) -> asyncio.AbstractServer:
         return await asyncio.start_server(
@@ -39,6 +42,25 @@ class ProtocolRouter:
         )
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        if self.active_connections >= self.max_connections:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except (ConnectionError, OSError):
+                pass
+            return
+
+        self.active_connections += 1
+        try:
+            await self._handle_connection(reader, writer)
+        finally:
+            self.active_connections -= 1
+
+    async def _handle_connection(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
         prefix = bytearray()
         use_socks = not self.mtproto_enabled
 
@@ -76,9 +98,9 @@ class ProtocolRouter:
 
         backend_writer: asyncio.StreamWriter | None = None
         try:
-            backend_reader, backend_writer = await asyncio.open_connection(
-                backend_host,
-                backend_port,
+            backend_reader, backend_writer = await asyncio.wait_for(
+                asyncio.open_connection(backend_host, backend_port),
+                timeout=10,
             )
             if prefix:
                 backend_writer.write(prefix)
@@ -112,9 +134,10 @@ class ProtocolRouter:
             while data := await reader.read(65536):
                 writer.write(data)
                 await writer.drain()
-        except (ConnectionError, OSError, asyncio.CancelledError):
-            if isinstance(asyncio.current_task(), asyncio.Task) and asyncio.current_task().cancelled():
-                raise
+        except asyncio.CancelledError:
+            raise
+        except (ConnectionError, OSError):
+            pass
         finally:
             try:
                 if writer.can_write_eof():

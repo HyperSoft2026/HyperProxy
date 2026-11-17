@@ -28,6 +28,9 @@ class Settings:
     mtproto_proxy_tag: str | None = None
     max_connections: int = 200
     max_connections_per_user: int = 20
+    database_pool_min_size: int = 1
+    database_pool_max_size: int = 3
+    database_pool_idle_seconds: int = 60
     connect_timeout: float = 10.0
     auth_timeout: float = 10.0
     allowed_ports: frozenset[int] = frozenset({80, 443, 5222})
@@ -75,6 +78,11 @@ class Settings:
         # Preserve the old SOCKS_HOST/SOCKS_PORT settings as the public TCP
         # listener. The new SOCKS backend uses separate loopback-only settings.
         legacy_router_port = integer("SOCKS_PORT", 4040, 1, 65535)
+        database_pool_min_size = integer("DB_POOL_MIN_SIZE", 1, 1, 5)
+        database_pool_max_size = integer("DB_POOL_MAX_SIZE", 3, 1, 10)
+        if database_pool_min_size > database_pool_max_size:
+            raise ValueError("DB_POOL_MIN_SIZE cannot exceed DB_POOL_MAX_SIZE")
+
         settings = cls(
             database_url=database_url,
             admin_username=admin_username,
@@ -92,6 +100,9 @@ class Settings:
             mtproto_proxy_tag=mtproto_proxy_tag,
             max_connections=integer("MAX_CONNECTIONS", 200, 1, 10000),
             max_connections_per_user=integer("MAX_CONNECTIONS_PER_USER", 20, 1, 1000),
+            database_pool_min_size=database_pool_min_size,
+            database_pool_max_size=database_pool_max_size,
+            database_pool_idle_seconds=integer("DB_POOL_IDLE_SECONDS", 60, 30, 600),
             connect_timeout=number("CONNECT_TIMEOUT_SECONDS", 10.0, 1.0, 120.0),
             auth_timeout=number("AUTH_TIMEOUT_SECONDS", 10.0, 1.0, 60.0),
             allowed_ports=parse_allowed_ports(env.get("ALLOWED_PORTS")),

@@ -56,6 +56,7 @@ async def run() -> None:
         "127.0.0.1",
         settings.mtproto_port,
         settings.mtproto_secret is not None,
+        settings.max_connections,
     )
     mtproto = MtprotoProcess(settings)
     health = HealthServer(database)

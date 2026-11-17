@@ -34,10 +34,9 @@ class Settings:
         if not database_url:
             raise ValueError("Set DATABASE_URL or POSTGRESQL_ADDON_URI before starting HyperProxy")
         if not admin_username or len(admin_username) > 64:
-            raise ValueError"PROXY_ADMIN_USERNAME must contain 1 to 64 characters")
+            raise ValueError("PROXY_ADMIN_USERNAME must contain 1 to 64 characters")
         if len(admin_password) < 16:
             raise ValueError("PROXY_ADMIN_PASSWORD must be at least 16 characters")
-
 
         def integer(name: str, default: int, minimum: int, maximum: int) -> int:
             try:

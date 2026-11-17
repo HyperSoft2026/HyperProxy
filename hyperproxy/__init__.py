@@ -1,3 +1,3 @@
-"""HyperProxy: authenticated SOCKS5 gateway for HyperSoft."""
+"""HyperProxy: dual-protocol proxy service for HyperSoft."""
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

@@ -72,14 +72,17 @@ class Settings:
                 raise ValueError(f"{name} must be between {minimum} and {maximum}")
             return result
 
+        # Preserve the old SOCKS_HOST/SOCKS_PORT settings as the public TCP
+        # listener. The new SOCKS backend uses separate loopback-only settings.
+        legacy_router_port = integer("SOCKS_PORT", 4040, 1, 65535)
         settings = cls(
             database_url=database_url,
             admin_username=admin_username,
             admin_password=admin_password,
-            socks_host=env.get("SOCKS_HOST", "127.0.0.1"),
-            socks_port=integer("SOCKS_PORT", 4041, 1, 65535),
-            router_host=env.get("ROUTER_HOST", "0.0.0.0"),
-            router_port=integer("ROUTER_PORT", 4040, 1, 65535),
+            socks_host=env.get("SOCKS_BACKEND_HOST", "127.0.0.1"),
+            socks_port=integer("SOCKS_BACKEND_PORT", 4041, 1, 65535),
+            router_host=env.get("ROUTER_HOST", env.get("SOCKS_HOST", "0.0.0.0")),
+            router_port=integer("ROUTER_PORT", legacy_router_port, 1, 65535),
             health_host=env.get("HEALTH_HOST", "0.0.0.0"),
             health_port=integer("HEALTH_PORT", 8080, 1, 65535),
             mtproto_port=integer("MTPROTO_PORT", 4042, 1, 65535),

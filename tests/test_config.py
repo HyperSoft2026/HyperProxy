@@ -56,6 +56,34 @@ class MtprotoConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Settings.from_env(env)
 
+    def test_database_pool_defaults_are_conservative(self):
+        settings = Settings.from_env(BASE_ENV)
+        self.assertEqual(settings.database_pool_min_size, 1)
+        self.assertEqual(settings.database_pool_max_size, 3)
+        self.assertEqual(settings.database_pool_idle_seconds, 60)
+
+    def test_database_pool_can_be_configured(self):
+        env = {
+            **BASE_ENV,
+            "DB_POOL_MIN_SIZE": "2",
+            "DB_POOL_MAX_SIZE": "5",
+            "DB_POOL_IDLE_SECONDS": "120",
+        }
+        settings = Settings.from_env(env)
+        self.assertEqual(settings.database_pool_min_size, 2)
+        self.assertEqual(settings.database_pool_max_size, 5)
+        self.assertEqual(settings.database_pool_idle_seconds, 120)
+
+    def test_database_pool_minimum_cannot_exceed_maximum(self):
+        env = {**BASE_ENV, "DB_POOL_MIN_SIZE": "4", "DB_POOL_MAX_SIZE": "3"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
+    def test_database_pool_idle_timeout_is_bounded(self):
+        env = {**BASE_ENV, "DB_POOL_IDLE_SECONDS": "10"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
 
 if __name__ == "__main__":
     unittest.main()

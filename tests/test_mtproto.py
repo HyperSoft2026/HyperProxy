@@ -38,14 +38,14 @@ class MtprotoListenerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_read_mtproxy_stats_parses_official_tab_separated_fields(self):
         async def stats_handler(reader, writer):
-            await reader.readuntil(b"\\r\\n\\r\\n")
+            await reader.readuntil(b"\r\n\r\n")
             writer.write(
-                b"HTTP/1.0 200 OK\\r\\n"
-                b"Content-Type: text/plain\\r\\n\\r\\n"
-                b"total_ready_targets\\t7\\n"
-                b"total_allocated_targets\\t19\\n"
-                b"ready_outbound_connections\\t28\\n"
-                b"total_connect_failures\\t2\\n"
+                b"HTTP/1.0 200 OK\r\n"
+                b"Content-Type: text/plain\r\n\r\n"
+                b"total_ready_targets\t7\n"
+                b"total_allocated_targets\t19\n"
+                b"ready_outbound_connections\t28\n"
+                b"total_connect_failures\t2\n"
             )
             await writer.drain()
             writer.close()

@@ -36,6 +36,8 @@ COPY hyperproxy ./hyperproxy
 
 USER hyperproxy
 
-EXPOSE 4040 4041 4042 8080 8888
+# Only the TCP router and required HTTP health listener are application-facing.
+# SOCKS5, MTProto, and MTProxy stats stay bound to loopback inside the container.
+EXPOSE 4040 8080
 
 CMD ["python", "-m", "hyperproxy"]

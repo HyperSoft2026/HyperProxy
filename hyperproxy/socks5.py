@@ -228,7 +228,7 @@ class Socks5Server:
 
             async with self._auth_semaphore:
                 user = await self.database.authenticate(username, password)
-            if user is None:
+            if user is None or user.get("role") != "user":
                 writer.write(b"\x01\x01")
                 await writer.drain()
                 outcome = "auth_failed"

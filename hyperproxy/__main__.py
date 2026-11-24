@@ -82,7 +82,14 @@ async def run() -> None:
             settings.admin_username,
             settings.admin_password,
             min(settings.max_connections_per_user, 20),
+            settings.public_username,
+            settings.public_password,
+            min(settings.max_connections_per_user, 20),
         )
+        if settings.public_username:
+            logger.info("Public SOCKS5 account enabled: %s", settings.public_username)
+        else:
+            logger.warning("No public SOCKS5 account configured; administrator credentials are not accepted by SOCKS5")
 
         socks = Socks5Server(settings, database)
         health = HealthServer(database)

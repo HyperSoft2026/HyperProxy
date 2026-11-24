@@ -30,7 +30,9 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the separate public usern
    | Variable | Required | Example / default |
    |---|---:|---|
    | PROXY_ADMIN_USERNAME | Yes | hypersoft-admin |
-   | PROXY_ADMIN_PASSWORD | Yes | Private administrator secret; never publish it |\n   | PROXY_PUBLIC_USERNAME | Recommended | Public SOCKS5 username, different from admin |\n   | PROXY_PUBLIC_PASSWORD | Recommended | Public SOCKS5 password, 16–128 characters |
+   | PROXY_ADMIN_PASSWORD | Yes | Private administrator secret; never publish it |
+   | PROXY_PUBLIC_USERNAME | Recommended | Public SOCKS5 username, different from admin |
+   | PROXY_PUBLIC_PASSWORD | Recommended | Public SOCKS5 password, 16–128 characters |
    | POSTGRESQL_ADDON_URI | Yes* | Provided by the linked add-on |
    | ALLOWED_PORTS | No | 80,443,5222 |
    | TELEGRAM_ALLOWED_CIDRS | No | Built-in official Telegram CIDRs; leave empty for defaults |
@@ -44,7 +46,7 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the separate public usern
 
    PostgreSQL pool settings are separate from SOCKS5 client limits. The default pool opens 1 connection and grows only when needed, up to 3; idle connections are retired after 60 seconds. If PostgreSQL briefly rejects connections because its role limit is reached, startup retries pool creation twice with short backoff delays. The pool size can be lowered further with DB_POOL_MAX_SIZE=1 if the database plan has a very small per-role connection limit.
 
-   Configure PROXY_PUBLIC_USERNAME and PROXY_PUBLIC_PASSWORD to create the separate public SOCKS5-only account. If these are unset, no public user account is enabled and the administrator account cannot connect through SOCKS5. Keep the administrator credentials private and different from the public credentials.\n\n   Set PROXY_PUBLIC_USERNAME and PROXY_PUBLIC_PASSWORD to create a separate public SOCKS5-only account. If they are unset, no public user account is enabled and administrator credentials cannot connect through SOCKS5. Keep administrator credentials private and different from public credentials.
+   Set PROXY_PUBLIC_USERNAME and PROXY_PUBLIC_PASSWORD to create a separate public SOCKS5-only account. If they are unset, no public user account is enabled and administrator credentials cannot connect through SOCKS5. Keep administrator credentials private and different from public credentials.
 
 4. Keep the existing Clever Cloud TCP redirection pointing to internal port 4040. **Do not create another redirection or change the current public port.** The router on 4040 dispatches traffic to the SOCKS5 backend on 4041 or the MTProto backend on 4042.
 5. Keep the HTTP health server on 8080. Check https://YOUR-APP.cleverapps.io/health and /ready.

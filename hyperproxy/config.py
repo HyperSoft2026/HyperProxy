@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Mapping
 
-from .security import parse_allowed_ports
+from .security import parse_allowed_ports, parse_telegram_networks
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +34,7 @@ class Settings:
     connect_timeout: float = 10.0
     auth_timeout: float = 10.0
     allowed_ports: frozenset[int] = frozenset({80, 443, 5222})
+    telegram_allowed_networks: tuple = ()
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -75,8 +76,7 @@ class Settings:
                 raise ValueError(f"{name} must be between {minimum} and {maximum}")
             return result
 
-        # Preserve the old SOCKS_HOST/SOCKS_PORT settings as the public TCP
-        # listener. The new SOCKS backend uses separate loopback-only settings.
+        # Preserve legacy SOCKS_HOST/SOCKS_PORT as the public TCP router.
         legacy_router_port = integer("SOCKS_PORT", 4040, 1, 65535)
         database_pool_min_size = integer("DB_POOL_MIN_SIZE", 1, 1, 5)
         database_pool_max_size = integer("DB_POOL_MAX_SIZE", 3, 1, 10)
@@ -106,6 +106,7 @@ class Settings:
             connect_timeout=number("CONNECT_TIMEOUT_SECONDS", 10.0, 1.0, 120.0),
             auth_timeout=number("AUTH_TIMEOUT_SECONDS", 10.0, 1.0, 60.0),
             allowed_ports=parse_allowed_ports(env.get("ALLOWED_PORTS")),
+            telegram_allowed_networks=parse_telegram_networks(env.get("TELEGRAM_ALLOWED_CIDRS")),
         )
 
         listener_ports = [settings.router_port, settings.socks_port, settings.health_port]

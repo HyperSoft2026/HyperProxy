@@ -3,6 +3,7 @@ import unittest
 
 from hyperproxy.config import Settings
 from hyperproxy.socks5 import Socks5Server
+from hyperproxy.security import parse_telegram_networks
 
 
 class FakeDatabase:
@@ -26,6 +27,7 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
             max_connections=5,
             max_connections_per_user=2,
             allowed_ports=frozenset({443}),
+            telegram_allowed_networks=parse_telegram_networks(),
         )
         self.proxy = Socks5Server(settings, FakeDatabase())
         self.server = await self.proxy.start()
@@ -56,6 +58,18 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
         await writer.drain()
         response = await reader.readexactly(10)
         self.assertEqual(response[0:2], b"\x05\x02")
+        writer.close()
+        await writer.wait_closed()
+
+    async def test_public_non_telegram_destination_is_rejected(self):
+        reader, writer = await self.connect_and_authenticate()
+        self.assertEqual(await reader.readexactly(2), b"\\x01\\x00")
+
+        # A public IP is denied unless it belongs to Telegram's CIDR allowlist.
+        writer.write(b"\\x05\\x01\\x00\\x01\\x01\\x01\\x01\\x01\\x01\\xbb")
+        await writer.drain()
+        response = await asyncio.wait_for(reader.readexactly(10), timeout=2)
+        self.assertEqual(response[0:2], b"\\x05\\x02")
         writer.close()
         await writer.wait_closed()
 

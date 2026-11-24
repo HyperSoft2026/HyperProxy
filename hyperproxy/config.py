@@ -15,6 +15,8 @@ class Settings:
     database_url: str
     admin_username: str
     admin_password: str
+    public_username: str | None = None
+    public_password: str | None = None
     socks_host: str = "127.0.0.1"
     socks_port: int = 4041
     router_host: str = "0.0.0.0"
@@ -42,6 +44,8 @@ class Settings:
         database_url = (env.get("DATABASE_URL") or env.get("POSTGRESQL_ADDON_URI") or "").strip()
         admin_username = env.get("PROXY_ADMIN_USERNAME", "").strip()
         admin_password = env.get("PROXY_ADMIN_PASSWORD", "")
+        public_username = (env.get("PROXY_PUBLIC_USERNAME") or "").strip() or None
+        public_password = env.get("PROXY_PUBLIC_PASSWORD") or None
         mtproto_secret = (env.get("MTPROTO_SECRET") or "").strip().lower() or None
         mtproto_proxy_tag = (env.get("MTPROTO_PROXY_TAG") or "").strip().lower() or None
 
@@ -51,6 +55,17 @@ class Settings:
             raise ValueError("PROXY_ADMIN_USERNAME must contain 1 to 64 characters")
         if len(admin_password) < 16:
             raise ValueError("PROXY_ADMIN_PASSWORD must be at least 16 characters")
+        if bool(public_username) != bool(public_password):
+            raise ValueError("Set both PROXY_PUBLIC_USERNAME and PROXY_PUBLIC_PASSWORD, or leave both unset")
+        if public_username:
+            if len(public_username) > 64:
+                raise ValueError("PROXY_PUBLIC_USERNAME must contain at most 64 characters")
+            if not 16 <= len(public_password or "") <= 128:
+                raise ValueError("PROXY_PUBLIC_PASSWORD must contain 16 to 128 characters")
+            if public_username == admin_username:
+                raise ValueError("Public and administrator usernames must be different")
+            if public_password == admin_password:
+                raise ValueError("Public and administrator passwords must be different")
         if mtproto_secret and not re.fullmatch(r"[0-9a-f]{32}", mtproto_secret):
             raise ValueError("MTPROTO_SECRET must be exactly 32 hexadecimal characters")
         if mtproto_proxy_tag and not mtproto_secret:
@@ -87,6 +102,8 @@ class Settings:
             database_url=database_url,
             admin_username=admin_username,
             admin_password=admin_password,
+            public_username=public_username,
+            public_password=public_password,
             socks_host=env.get("SOCKS_BACKEND_HOST", "127.0.0.1"),
             socks_port=integer("SOCKS_BACKEND_PORT", 4041, 1, 65535),
             router_host=env.get("ROUTER_HOST", env.get("SOCKS_HOST", "0.0.0.0")),

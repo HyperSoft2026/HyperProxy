@@ -11,7 +11,7 @@
 - A small TCP protocol router dispatches SOCKS5 and MTProto over the same public TCP port.
 - Optional Telegram promotion tag from @MTProxyBot to promote a public channel.
 - PostgreSQL-backed SOCKS5 user accounts; passwords are stored as salted scrypt hashes.
-- Bootstrap administrator account configured through environment variables.
+- Private bootstrap administrator account configured through environment variables; administrator credentials are never accepted by the public SOCKS5 listener.
 - Default SOCKS5 destination-port allowlist: 80,443,5222.
 - SOCKS5 destination IPs must also belong to Telegram's published server CIDRs (`https://core.telegram.org/resources/cidr.txt`); other public IPs are rejected.
 - Rejects loopback, private, link-local, multicast, reserved, and other non-global SOCKS5 destination IP addresses.
@@ -30,7 +30,7 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the administrator usernam
    | Variable | Required | Example / default |
    |---|---:|---|
    | PROXY_ADMIN_USERNAME | Yes | hypersoft-admin |
-   | PROXY_ADMIN_PASSWORD | Yes | A unique random secret, at least 16 characters |
+   | PROXY_ADMIN_PASSWORD | Yes | Private administrator secret; never publish it |\n   | PROXY_PUBLIC_USERNAME | Recommended | Public SOCKS5 username, different from admin |\n   | PROXY_PUBLIC_PASSWORD | Recommended | Public SOCKS5 password, 16–128 characters |
    | POSTGRESQL_ADDON_URI | Yes* | Provided by the linked add-on |
    | ALLOWED_PORTS | No | 80,443,5222 |
    | TELEGRAM_ALLOWED_CIDRS | No | Built-in official Telegram CIDRs; leave empty for defaults |
@@ -44,7 +44,7 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the administrator usernam
 
    PostgreSQL pool settings are separate from SOCKS5 client limits. The default pool opens 1 connection and grows only when needed, up to 3; idle connections are retired after 60 seconds. If PostgreSQL briefly rejects connections because its role limit is reached, startup retries pool creation twice with short backoff delays. The pool size can be lowered further with DB_POOL_MAX_SIZE=1 if the database plan has a very small per-role connection limit.
 
-4. Keep the existing Clever Cloud TCP redirection pointing to internal port 4040. **Do not create another redirection or change the current public port.** The router on 4040 dispatches traffic to the SOCKS5 backend on 4041 or the MTProto backend on 4042.
+   Configure PROXY_PUBLIC_USERNAME and PROXY_PUBLIC_PASSWORD to create the separate public SOCKS5-only account. If these are unset, no public user account is enabled and the administrator account cannot connect through SOCKS5. Keep the administrator credentials private and different from the public credentials.\n\n4. Keep the existing Clever Cloud TCP redirection pointing to internal port 4040. **Do not create another redirection or change the current public port.** The router on 4040 dispatches traffic to the SOCKS5 backend on 4041 or the MTProto backend on 4042.
 5. Keep the HTTP health server on 8080. Check https://YOUR-APP.cleverapps.io/health and /ready.
 6. MTProto is optional. If MTPROTO_SECRET is empty, the public TCP listener continues to route traffic to SOCKS5 only.
 
@@ -120,7 +120,7 @@ docker build -t hypersoft/hyperproxy:1.1.0 .
 
 ## Security notes
 
-- Never run the SOCKS5 service without a strong bootstrap username and password.
+- Never publish PROXY_ADMIN_USERNAME or PROXY_ADMIN_PASSWORD. SOCKS5 rejects accounts with the admin role; only the separate role=user public account can authenticate.
 - Do not remove the SOCKS5 destination IP checks or connection limits for a public deployment.
 - SOCKS5 can connect only to IP addresses inside Telegram's published CIDR ranges and to destination ports listed in ALLOWED_PORTS. Other public IPs, private networks, localhost, metadata endpoints, and non-Telegram destinations are rejected.
 - Telegram may change its published CIDRs. Review `https://core.telegram.org/resources/cidr.txt` and update the built-in list when Telegram changes it. Do not broaden the list to `0.0.0.0/0` or `::/0`.
@@ -129,7 +129,7 @@ docker build -t hypersoft/hyperproxy:1.1.0 .
 - Keep the MTProto secret and promotion tag in Clever Cloud environment variables. Share the MTProto secret only with intended proxy users.
 - The proxy does not decrypt Telegram message contents. The operator can still observe connection metadata such as client IP addresses and connection times.
 - The load balancer may hide the original client IP from the application; per-user SOCKS5 authentication and connection limits are therefore used instead of trusting source IPs.
-- The bootstrap SOCKS5 account's password is synchronized from the environment on startup. Changing the environment value and redeploying rotates that account's password.
+- The private administrator password and public SOCKS5 password are stored as separate salted hashes. Changing either environment variable and redeploying synchronizes that account's password.
 
 ## Health endpoints
 

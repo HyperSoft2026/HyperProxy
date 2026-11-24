@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping
 
 from .security import parse_allowed_ports, parse_telegram_networks
@@ -34,7 +34,7 @@ class Settings:
     connect_timeout: float = 10.0
     auth_timeout: float = 10.0
     allowed_ports: frozenset[int] = frozenset({80, 443, 5222})
-    telegram_allowed_networks: tuple = ()
+    telegram_allowed_networks: tuple = field(default_factory=parse_telegram_networks)
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":

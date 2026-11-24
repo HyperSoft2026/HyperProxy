@@ -13,6 +13,7 @@
 - PostgreSQL-backed SOCKS5 user accounts; passwords are stored as salted scrypt hashes.
 - Bootstrap administrator account configured through environment variables.
 - Default SOCKS5 destination-port allowlist: 80,443,5222.
+- SOCKS5 destination IPs must also belong to Telegram's published server CIDRs (`https://core.telegram.org/resources/cidr.txt`); other public IPs are rejected.
 - Rejects loopback, private, link-local, multicast, reserved, and other non-global SOCKS5 destination IP addresses.
 - Global and per-user concurrent SOCKS5 connection limits.
 - HTTP health endpoints on port 8080.
@@ -32,6 +33,7 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the administrator usernam
    | PROXY_ADMIN_PASSWORD | Yes | A unique random secret, at least 16 characters |
    | POSTGRESQL_ADDON_URI | Yes* | Provided by the linked add-on |
    | ALLOWED_PORTS | No | 80,443,5222 |
+   | TELEGRAM_ALLOWED_CIDRS | No | Built-in official Telegram CIDRs; leave empty for defaults |
    | MAX_CONNECTIONS | No | 200 |
    | MAX_CONNECTIONS_PER_USER | No | 20 |
    | DB_POOL_MIN_SIZE | No | 1 |
@@ -120,7 +122,9 @@ docker build -t hypersoft/hyperproxy:1.1.0 .
 
 - Never run the SOCKS5 service without a strong bootstrap username and password.
 - Do not remove the SOCKS5 destination IP checks or connection limits for a public deployment.
-- Only SOCKS5 destination ports listed in ALLOWED_PORTS are accepted. Add ports only when you understand why clients need them.
+- SOCKS5 can connect only to IP addresses inside Telegram's published CIDR ranges and to destination ports listed in ALLOWED_PORTS. Other public IPs, private networks, localhost, metadata endpoints, and non-Telegram destinations are rejected.
+- Telegram may change its published CIDRs. Review `https://core.telegram.org/resources/cidr.txt` and update the built-in list when Telegram changes it. Do not broaden the list to `0.0.0.0/0` or `::/0`.
+- SOCKS5 cannot reliably identify which client application initiated a connection. A user may technically use another SOCKS5-capable app, but the proxy will still only permit connections to the allowlisted Telegram networks and ports.
 - MTProto is a Telegram-specific proxy, not a general-purpose VPN.
 - Keep the MTProto secret and promotion tag in Clever Cloud environment variables. Share the MTProto secret only with intended proxy users.
 - The proxy does not decrypt Telegram message contents. The operator can still observe connection metadata such as client IP addresses and connection times.

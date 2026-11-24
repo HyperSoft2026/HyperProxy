@@ -19,6 +19,8 @@ class MtprotoConfigTests(unittest.TestCase):
         self.assertEqual(settings.socks_port, 4041)
         self.assertEqual(settings.mtproto_port, 4042)
         self.assertGreater(len(settings.telegram_allowed_networks), 0)
+        self.assertIsNone(settings.public_username)
+        self.assertIsNone(settings.public_password)
 
     def test_legacy_socks_listener_variables_keep_public_port(self):
         env = {**BASE_ENV, "SOCKS_HOST": "0.0.0.0", "SOCKS_PORT": "4040"}
@@ -27,6 +29,37 @@ class MtprotoConfigTests(unittest.TestCase):
         self.assertEqual(settings.router_port, 4040)
         self.assertEqual(settings.socks_host, "127.0.0.1")
         self.assertEqual(settings.socks_port, 4041)
+
+    def test_separate_public_proxy_account(self):
+        env = {
+            **BASE_ENV,
+            "PROXY_PUBLIC_USERNAME": "telegram-users",
+            "PROXY_PUBLIC_PASSWORD": "a-separate-public-password",
+        }
+        settings = Settings.from_env(env)
+        self.assertEqual(settings.public_username, "telegram-users")
+        self.assertEqual(settings.public_password, "a-separate-public-password")
+
+    def test_public_account_requires_both_credentials(self):
+        env = {**BASE_ENV, "PROXY_PUBLIC_USERNAME": "telegram-users"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+
+    def test_public_account_cannot_reuse_admin_credentials(self):
+        env = {
+            **BASE_ENV,
+            "PROXY_PUBLIC_USERNAME": "test-admin",
+            "PROXY_PUBLIC_PASSWORD": "a-separate-public-password",
+        }
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
+        env = {
+            **BASE_ENV,
+            "PROXY_PUBLIC_USERNAME": "telegram-users",
+            "PROXY_PUBLIC_PASSWORD": BASE_ENV["PROXY_ADMIN_PASSWORD"],
+        }
+        with self.assertRaises(ValueError):
+            Settings.from_env(env)
 
     def test_valid_mtproto_secret_and_tag(self):
         env = {

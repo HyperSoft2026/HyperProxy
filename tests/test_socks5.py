@@ -80,7 +80,7 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
             username="test-admin",
             password="unused-test-password",
         )
-        self.assertEqual(await reader.readexactly(2), b"\\x01\\x01")
+        self.assertEqual(await reader.readexactly(2), b"\x01\x01")
         writer.close()
         await writer.wait_closed()
 

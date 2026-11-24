@@ -45,7 +45,7 @@ class Database:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
 
-    async def initialize(self, admin_username: str, admin_password: str, admin_limit: int) -> None:
+    async def initialize(\n        self,\n        admin_username: str,\n        admin_password: str,\n        admin_limit: int,\n        public_username: str | None = None,\n        public_password: str | None = None,\n        public_limit: int = 10,\n    ) -> None:
         async with self.pool.acquire() as connection:
             await connection.execute(SCHEMA)
             salt, digest = hash_password(admin_password)
@@ -67,6 +67,37 @@ class Database:
                 digest,
                 admin_limit,
             )
+
+            # Public proxy users are separate from the private bootstrap administrator.
+            # Keep only the configured public account enabled; never delete existing rows.
+            if public_username and public_password:
+                await connection.execute(
+                    "UPDATE proxy_users SET enabled = FALSE WHERE role = 'user' AND username <> $1",
+                    public_username,
+                )
+                public_salt, public_digest = hash_password(public_password)
+                await connection.execute(
+                    """
+                    INSERT INTO proxy_users
+                        (username, password_salt, password_hash, role, enabled, max_connections)
+                    VALUES ($1, $2, $3, 'user', TRUE, $4)
+                    ON CONFLICT (username) DO UPDATE SET
+                        password_salt = EXCLUDED.password_salt,
+                        password_hash = EXCLUDED.password_hash,
+                        role = 'user',
+                        enabled = TRUE,
+                        max_connections = EXCLUDED.max_connections,
+                        updated_at = NOW()
+                    """,
+                    public_username,
+                    public_salt,
+                    public_digest,
+                    public_limit,
+                )
+            else:
+                await connection.execute(
+                    "UPDATE proxy_users SET enabled = FALSE WHERE role = 'user'"
+                )
 
     async def authenticate(self, username: str, password: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as connection:

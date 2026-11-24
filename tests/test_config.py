@@ -18,6 +18,7 @@ class MtprotoConfigTests(unittest.TestCase):
         self.assertEqual(settings.router_port, 4040)
         self.assertEqual(settings.socks_port, 4041)
         self.assertEqual(settings.mtproto_port, 4042)
+        self.assertGreater(len(settings.telegram_allowed_networks), 0)
 
     def test_legacy_socks_listener_variables_keep_public_port(self):
         env = {**BASE_ENV, "SOCKS_HOST": "0.0.0.0", "SOCKS_PORT": "4040"}

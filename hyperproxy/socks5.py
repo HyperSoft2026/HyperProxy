@@ -12,7 +12,7 @@ from typing import Any
 
 from .config import Settings
 from .database import Database
-from .security import is_public_ip
+from .security import is_allowed_telegram_ip
 
 logger = logging.getLogger("hyperproxy.socks5")
 
@@ -103,7 +103,7 @@ class Socks5Server:
 
         loop = asyncio.get_running_loop()
         if literal is not None:
-            if not is_public_ip(str(literal)):
+            if not is_allowed_telegram_ip(str(literal), self.settings.telegram_allowed_networks):
                 raise PermissionError("Non-public destination address")
             family = socket.AF_INET6 if literal.version == 6 else socket.AF_INET
             return await loop.getaddrinfo(host, port, family=family, type=socket.SOCK_STREAM)
@@ -119,7 +119,7 @@ class Socks5Server:
         if not records:
             raise OSError("Destination has no address records")
         # Reject mixed public/private DNS answers to reduce DNS-rebinding/SSRF risk.
-        if any(not is_public_ip(record[4][0]) for record in records):
+        if any(not is_allowed_telegram_ip(record[4][0], self.settings.telegram_allowed_networks) for record in records):
             raise PermissionError("Destination resolved to a non-public address")
         return records
 

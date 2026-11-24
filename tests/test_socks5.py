@@ -63,13 +63,13 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_public_non_telegram_destination_is_rejected(self):
         reader, writer = await self.connect_and_authenticate()
-        self.assertEqual(await reader.readexactly(2), b"\\x01\\x00")
+        self.assertEqual(await reader.readexactly(2), b"\x01\x00")
 
         # A public IP is denied unless it belongs to Telegram's CIDR allowlist.
-        writer.write(b"\\x05\\x01\\x00\\x01\\x01\\x01\\x01\\x01\\x01\\xbb")
+        writer.write(b"\x05\x01\x00\x01\x01\x01\x01\x01\x01\xbb")
         await writer.drain()
         response = await asyncio.wait_for(reader.readexactly(10), timeout=2)
-        self.assertEqual(response[0:2], b"\\x05\\x02")
+        self.assertEqual(response[0:2], b"\x05\x02")
         writer.close()
         await writer.wait_closed()
 

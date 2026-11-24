@@ -31,8 +31,8 @@ SOCKS5 and MTProto are separate protocols. SOCKS5 uses the separate public usern
    |---|---:|---|
    | PROXY_ADMIN_USERNAME | Yes | hypersoft-admin |
    | PROXY_ADMIN_PASSWORD | Yes | Private administrator secret; never publish it |
-   | PROXY_PUBLIC_USERNAME | Recommended | Public SOCKS5 username, different from admin |
-   | PROXY_PUBLIC_PASSWORD | Recommended | Public SOCKS5 password, 16–128 characters |
+   | PROXY_PUBLIC_USERNAME | Required for public access | Public SOCKS5 username, different from admin |
+   | PROXY_PUBLIC_PASSWORD | Required for public access | Public SOCKS5 password, 16–128 characters |
    | POSTGRESQL_ADDON_URI | Yes* | Provided by the linked add-on |
    | ALLOWED_PORTS | No | 80,443,5222 |
    | TELEGRAM_ALLOWED_CIDRS | No | Built-in official Telegram CIDRs; leave empty for defaults |

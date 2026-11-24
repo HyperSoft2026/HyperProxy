@@ -10,6 +10,8 @@ class FakeDatabase:
     async def authenticate(self, username, password):
         if username == "test-user" and password == "test-password":
             return {"username": username, "max_connections": 2, "role": "user"}
+        if username == "test-admin" and password == "unused-test-password":
+            return {"username": username, "max_connections": 2, "role": "admin"}
         return None
 
     async def record_event(self, *args, **kwargs):
@@ -37,15 +39,15 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.server.close()
         await self.server.wait_closed()
 
-    async def connect_and_authenticate(self, password="test-password"):
+    async def connect_and_authenticate(self, username="test-user", password="test-password"):
         reader, writer = await asyncio.open_connection("127.0.0.1", self.port)
         writer.write(b"\x05\x01\x02")
         await writer.drain()
         self.assertEqual(await reader.readexactly(2), b"\x05\x02")
 
-        username = b"test-user"
+        username_bytes = username.encode()
         password_bytes = password.encode()
-        writer.write(bytes((1, len(username))) + username + bytes((len(password_bytes),)) + password_bytes)
+        writer.write(bytes((1, len(username_bytes))) + username_bytes + bytes((len(password_bytes),)) + password_bytes)
         await writer.drain()
         return reader, writer
 
@@ -70,6 +72,15 @@ class Socks5ProtocolTests(unittest.IsolatedAsyncioTestCase):
         await writer.drain()
         response = await asyncio.wait_for(reader.readexactly(10), timeout=2)
         self.assertEqual(response[0:2], b"\x05\x02")
+        writer.close()
+        await writer.wait_closed()
+
+    async def test_administrator_account_is_rejected_by_public_socks5(self):
+        reader, writer = await self.connect_and_authenticate(
+            username="test-admin",
+            password="unused-test-password",
+        )
+        self.assertEqual(await reader.readexactly(2), b"\\x01\\x01")
         writer.close()
         await writer.wait_closed()
 

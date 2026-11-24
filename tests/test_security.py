@@ -49,7 +49,7 @@ class DestinationPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_telegram_networks("not-a-network")
         with self.assertRaises(ValueError):
-            parse_telegram_networks("")
+            parse_telegram_networks([])
 
     def test_default_allowed_ports(self):
         self.assertEqual(parse_allowed_ports(None), frozenset({80, 443, 5222}))

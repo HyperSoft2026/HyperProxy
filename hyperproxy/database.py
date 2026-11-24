@@ -45,7 +45,15 @@ class Database:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
 
-    async def initialize(\n        self,\n        admin_username: str,\n        admin_password: str,\n        admin_limit: int,\n        public_username: str | None = None,\n        public_password: str | None = None,\n        public_limit: int = 10,\n    ) -> None:
+    async def initialize(
+        self,
+        admin_username: str,
+        admin_password: str,
+        admin_limit: int,
+        public_username: str | None = None,
+        public_password: str | None = None,
+        public_limit: int = 10,
+    ) -> None:
         async with self.pool.acquire() as connection:
             await connection.execute(SCHEMA)
             salt, digest = hash_password(admin_password)
